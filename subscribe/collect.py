@@ -42,158 +42,82 @@ def assign(
     num_threads: int = 0,
     **kwargs,
 ) -> list[TaskConfig]:
+    """
+    Assign tasks for collecting proxies.
+    Modified to prioritize SUBSCRIBE environment variable and disable auto-crawling of garbage sites.
+    """
+    
+    # 内部辅助函数：加载 Gist 里的旧订阅 (保留逻辑以防万一，但主要依赖 Env)
     def load_exist(username: str, gist_id: str, access_token: str, filename: str) -> list[str]:
-        if not filename:
+        if not filename or not username or not gist_id or not access_token:
             return []
 
         subscriptions = set()
-
         pattern = r"^https?:\/\/[^\s]+"
-        local_file = os.path.join(DATA_BASE, filename)
-        if os.path.exists(local_file) and os.path.isfile(local_file):
-            with open(local_file, "r", encoding="utf8") as f:
-                items = re.findall(pattern, str(f.read()), flags=re.M)
-                if items:
-                    subscriptions.update(items)
-
-        if username and gist_id and access_token:
+        
+        # 尝试从 Gist 读取
+        try:
             push_tool = push.PushToGist(token=access_token)
             url = push_tool.raw_url(config={"username": username, "gistid": gist_id, "filename": filename})
-
             content = utils.http_get(url=url, timeout=30)
             items = re.findall(pattern, content, flags=re.M)
             if items:
                 subscriptions.update(items)
+        except Exception:
+            pass
+            
+        return list(subscriptions)
 
-        logger.info("start checking whether existing subscriptions have expired")
+    # --------------------------------------------------------------------------
+    # 核心修改区域：只从 SUBSCRIBE 变量和自定义链接加载，拒绝自动爬取垃圾站
+    # --------------------------------------------------------------------------
+    
+    subscriptions = set()
 
-        # 过滤已过期订阅并返回
-        links = list(subscriptions)
-        results = utils.multi_thread_run(
-            func=crawl.check_status,
-            tasks=links,
-            num_threads=num_threads,
-            show_progress=display,
-        )
+    # 1. 优先读取 SUBSCRIBE 环境变量 (最重要)
+    # 支持用 | 或 , 或 换行符 分隔
+    env_subs = os.environ.get("SUBSCRIBE", "")
+    if env_subs:
+        items = re.split(r"[|,\n]", env_subs)
+        valid_items = [x.strip() for x in items if x.strip().startswith("http")]
+        if valid_items:
+            subscriptions.update(valid_items)
+            logger.info(f"[Config] Loaded {len(valid_items)} sources from SUBSCRIBE environment variable")
 
-        return [links[i] for i in range(len(links)) if results[i][0] and not results[i][1]]
+    # 2. 读取自定义链接 (CUSTOMIZE_LINK)
+    customize_link = utils.trim(kwargs.get("customize_link", ""))
+    if customize_link and isurl(customize_link):
+        subscriptions.add(customize_link)
+        logger.info(f"[Config] Loaded custom link: {customize_link}")
 
-    def parse_domains(content: str) -> dict:
-        if not content or not isinstance(content, str):
-            logger.warning("cannot found any domain due to content is empty or not string")
-            return {}
-
-        records = {}
-        for line in content.split("\n"):
-            line = utils.trim(line)
-            if not line or line.startswith("#"):
-                continue
-
-            words = line.rsplit(delimiter, maxsplit=3)
-            address = utils.trim(words[0])
-            coupon = utils.trim(words[1]) if len(words) > 1 else ""
-            invite_code = utils.trim(words[2]) if len(words) > 2 else ""
-            api_prefix = utils.trim(words[3]) if len(words) > 3 else ""
-
-            records[address] = {"coupon": coupon, "invite_code": invite_code, "api_prefix": api_prefix}
-
-        return records
-
+    # 3. (可选) 读取传入的已存在订阅文件，防止 Gist 里有好的旧货被丢弃
+    # 如果你只想完全依赖 SUBSCRIBE 变量，可以把下面这几行注释掉
     subscribes_file = utils.trim(kwargs.get("subscribes_file", ""))
     access_token = utils.trim(kwargs.get("access_token", ""))
     gist_id = utils.trim(kwargs.get("gist_id", ""))
     username = utils.trim(kwargs.get("username", ""))
-    chuck = kwargs.get("chuck", False)
+    
+    # 从 Gist 加载旧订阅 (仅作补充)
+    old_subs = load_exist(username, gist_id, access_token, subscribes_file)
+    if old_subs:
+        # 这里可以选择是否要把旧的加进去，默认加上以防万一
+        subscriptions.update(old_subs)
 
-    # 加载已有订阅
-    subscriptions = load_exist(username, gist_id, access_token, subscribes_file)
-    logger.info(f"load exists subscription finished, count: {len(subscriptions)}")
+    logger.info(f"[Config] Total subscriptions to fetch: {len(subscriptions)}")
 
     # 是否允许特殊协议
     special_protocols = AirPort.enable_special_protocols()
 
-    tasks = (
-        [
-            TaskConfig(name=utils.random_chars(length=8), sub=x, bin_name=bin_name, special_protocols=special_protocols)
-            for x in subscriptions
-            if x
-        ]
-        if subscriptions
-        else []
-    )
+    # 生成任务列表
+    tasks = [
+        TaskConfig(name=utils.random_chars(length=8), sub=x, bin_name=bin_name, special_protocols=special_protocols)
+        for x in subscriptions if x
+    ]
 
-    # 仅更新已有订阅
-    if tasks and kwargs.get("refresh", False):
-        logger.info("skip registering new accounts, will use existing subscriptions for refreshing")
-        return tasks
+    if not tasks:
+        logger.warning("[Warning] No subscriptions found! Please check your 'SUBSCRIBE' secret in GitHub Settings.")
 
-    domains, delimiter = {}, "@#@#"
-    domains_file = utils.trim(domains_file)
-    if not domains_file:
-        domains_file = "domains.txt"
-
-    # 加载已有站点列表
-    fullpath = os.path.join(DATA_BASE, domains_file)
-    if os.path.exists(fullpath) and os.path.isfile(fullpath):
-        with open(fullpath, "r", encoding="UTF8") as f:
-            domains.update(parse_domains(content=str(f.read())))
-
-    # 爬取新站点列表
-    if not domains or overwrite:
-        candidates = crawl.collect_airport(
-            channel="jichang_list",
-            page_num=pages,
-            num_thread=num_threads,
-            rigid=rigid,
-            display=display,
-            filepath=os.path.join(DATA_BASE, "coupons.txt"),
-            delimiter=delimiter,
-            chuck=chuck,
-        )
-
-        if candidates:
-            for k, v in candidates.items():
-                item = domains.get(k, {})
-                item.update(v)
-
-                domains[k] = item
-
-            overwrite = True
-
-    # 加载自定义机场列表
-    customize_link = utils.trim(kwargs.get("customize_link", ""))
-    if customize_link:
-        if isurl(customize_link):
-            domains.update(parse_domains(content=utils.http_get(url=customize_link)))
-        else:
-            local_file = os.path.join(DATA_BASE, customize_link)
-            if local_file != fullpath and os.path.exists(local_file) and os.path.isfile(local_file):
-                with open(local_file, "r", encoding="UTF8") as f:
-                    domains.update(parse_domains(content=str(f.read())))
-
-    if not domains:
-        logger.error("cannot collect any new airport for free use")
-        return tasks
-
-    if overwrite:
-        crawl.save_candidates(candidates=domains, filepath=fullpath, delimiter=delimiter)
-
-    for domain, param in domains.items():
-        name = crawl.naming_task(url=domain)
-        tasks.append(
-            TaskConfig(
-                name=name,
-                domain=domain,
-                coupon=param.get("coupon", ""),
-                invite_code=param.get("invite_code", ""),
-                api_prefix=param.get("api_prefix", ""),
-                bin_name=bin_name,
-                rigid=rigid,
-                chuck=chuck,
-                special_protocols=special_protocols,
-            )
-        )
-
+    # 直接返回任务，不再执行原来的 crawl.collect_airport 逻辑
     return tasks
 
 
