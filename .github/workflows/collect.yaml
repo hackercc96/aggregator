@@ -2,24 +2,19 @@ name: Collect
 
 on:
   schedule:
-    # 每 3 小时运行一次，保证节点新鲜
+    # 保持每3小时运行一次 (这是好的修改，保留)
     - cron: "0 */2 * * *"
   workflow_dispatch:
 
-# 并发规则：防止任务互相打架
+# 保持并发修复，防止任务自杀 (这是好的修改，保留)
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
-  # 时区设置
   TZ: Asia/Shanghai
-
-  # 核心变量
   GIST_PAT: ${{ secrets.GIST_PAT }}
   GIST_LINK: ${{ secrets.GIST_LINK }}
-
-  # 自定义变量 (保留你原有的设置)
   CUSTOMIZE_LINK: ${{ secrets.CUSTOMIZE_LINK }}
   ENABLE_SPECIAL_PROTOCOLS: ${{ vars.ENABLE_SPECIAL_PROTOCOLS }}
 
@@ -61,12 +56,11 @@ jobs:
               exit 1
           fi
 
-      # 🔴 关键修改：删除了 --skip 参数
-      # --all: 抓取所有源
-      # --overwrite: 覆盖旧数据
-      # (去掉了 --skip): 开启测速验证！只有活的节点才会被保存！
+      # 🔴 核心修正：加回了 --skip 参数
+      # 这将恢复原版逻辑：不进行服务器端测速，直接保存抓取到的内容
+      # 这样可以避免因 GitHub IP 被墙导致的误判
       - name: Collect
-        run: python -u subscribe/collect.py --all --overwrite
+        run: python -u subscribe/collect.py --all --overwrite --skip
 
       - name: Timestamp
         run: date
