@@ -1,7 +1,7 @@
 name: Collect
 
 on:
-  schedule:
+ # schedule:
     # 每4小时运行一次
     #- cron: "0 */4 * * *"
   workflow_dispatch:
