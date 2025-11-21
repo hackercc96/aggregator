@@ -520,7 +520,7 @@ if __name__ == "__main__":
         "--num",
         type=int,
         required=False,
-        default=64,
+        default=16,
         help="threads num for check proxy",
     )
 
