@@ -64,7 +64,7 @@ jobs:
       # -n 16: 128线程并发 (安全且快)
       # -t clash: 只输出 clash 配置
       - name: Collect
-        run: python -u subscribe/collect.py --all --overwrite --skip -p 1 -n 128
+        run: python -u subscribe/collect.py --all --overwrite --skip -p 5 -n 128
 
       - name: Timestamp
         run: date
