@@ -54,17 +54,17 @@ jobs:
           fi
 
       # 核心步骤：先清理本地的历史垃圾文件
-      #- name: Clean History
-      #  run: |
-      #    rm -f data/domains.txt
-      #    echo "History domains cleaned."
+      - name: Clean History
+        run: |
+          rm -f data/domains.txt
+          echo "History domains cleaned."
 
       # 极速抓取：
       # -p 1: 只抓最新
       # -n 16: 128线程并发 (安全且快)
       # -t clash: 只输出 clash 配置
       - name: Collect
-        run: python -u subscribe/collect.py --all --overwrite --skip -p 1 -n 128
+        run: python -u subscribe/collect.py --all --overwrite --skip -p 2 -n 128
 
       - name: Timestamp
         run: date
