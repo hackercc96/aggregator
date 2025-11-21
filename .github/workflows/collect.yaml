@@ -2,8 +2,8 @@ name: Collect
 
 on:
   schedule:
-    # 每小时运行一次,如果不新鲜可以改成半小时一次 0,30 * * * *
-    - cron: "0 * * * *"
+    # 每4小时运行一次
+    - cron: "0 */4 * * *"
   workflow_dispatch:
 
 concurrency:
