@@ -60,7 +60,7 @@ jobs:
       # 这将恢复原版逻辑：不进行服务器端测速，直接保存抓取到的内容
       # 这样可以避免因 GitHub IP 被墙导致的误判
       - name: Collect
-        run: python -u subscribe/collect.py --all --overwrite --skip -p 2 -n 16
+        run: python -u subscribe/collect.py --all --overwrite --skip -p 1 -n 32
 
       - name: Timestamp
         run: date
