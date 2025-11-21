@@ -2,6 +2,7 @@
 
 # @Author  : wzdnzd
 # @Time    : 2022-07-15
+
 import argparse
 import itertools
 import os
@@ -519,7 +520,7 @@ if __name__ == "__main__":
         "--num",
         type=int,
         required=False,
-        default=16,
+        default=64,
         help="threads num for check proxy",
     )
 
