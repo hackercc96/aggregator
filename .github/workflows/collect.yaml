@@ -2,11 +2,10 @@ name: Collect
 
 on:
   schedule:
-    # 保持每3小时运行一次 (这是好的修改，保留)
-    - cron: "0 */3 * * *"
+    # 每小时运行一次
+    - cron: "0 * * * *"
   workflow_dispatch:
 
-# 保持并发修复，防止任务自杀 (这是好的修改，保留)
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -44,23 +43,28 @@ jobs:
               echo "Error: environment 'GIST_PAT' cannot be empty"
               exit 1
           fi
-
           if [ -z "$GIST_LINK" ]; then
               echo "Error: environment 'GIST_LINK' cannot be empty"
               exit 1
           fi
-
           LINK_PARTS=$(echo "$GIST_LINK" | awk -F'/' 'NF==2 && $1!="" && $2!=""')
           if [ -z "$LINK_PARTS" ]; then
               echo "Error: environment 'GIST_LINK' is not valid, should be 'username/gist_id' format"
               exit 1
           fi
 
-      # 🔴 核心修正：加回了 --skip 参数
-      # 这将恢复原版逻辑：不进行服务器端测速，直接保存抓取到的内容
-      # 这样可以避免因 GitHub IP 被墙导致的误判
+      # 核心步骤：先清理本地的历史垃圾文件
+      - name: Clean History
+        run: |
+          rm -f data/domains.txt
+          echo "History domains cleaned."
+
+      # 极速抓取：
+      # -p 1: 只抓最新
+      # -n 16: 16线程并发 (安全且快)
+      # -t clash: 只输出 clash 配置
       - name: Collect
-        run: python -u subscribe/collect.py --all --overwrite --skip -p 1 -n 32
+        run: python -u subscribe/collect.py --all --overwrite --skip -p 1 -n 16
 
       - name: Timestamp
         run: date
