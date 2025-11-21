@@ -12,7 +12,7 @@ import shutil
 import subprocess
 import sys
 import time
-
+import socket
 import crawl
 import executable
 import push
@@ -26,7 +26,7 @@ from workflow import TaskConfig
 
 import clash
 import subconverter
-
+socket.setdefaulttimeout(2)
 PATH = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 
 DATA_BASE = os.path.join(PATH, "data")
