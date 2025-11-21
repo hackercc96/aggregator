@@ -2,31 +2,6 @@
 
 # @Author  : wzdnzd
 # @Time    : 2022-07-15
-# 🟢 === 极速补丁开始 (必须放在最前面) ===
-import socket
-import requests.sessions
-import functools
-
-# 1. 强制底层 Socket 2秒超时
-socket.setdefaulttimeout(2)
-
-# 2. 暴力劫持 requests 库
-# 不管原有代码写了 timeout=30 还是多少，这里强制改成 2秒！
-# 这样能瞬间解决“卡在90%”的问题
-if not hasattr(requests.sessions.Session, 'original_request'):
-    requests.sessions.Session.original_request = requests.sessions.Session.request
-
-def fast_request(self, method, url, *args, **kwargs):
-    # 强制覆盖超时参数
-    kwargs['timeout'] = 2
-    try:
-        return self.original_request(method, url, *args, **kwargs)
-    except Exception as e:
-        # 遇到错误直接抛出，不要等待
-        raise e
-
-requests.sessions.Session.request = fast_request
-# 🟢 === 极速补丁结束 ===
 import argparse
 import itertools
 import os
